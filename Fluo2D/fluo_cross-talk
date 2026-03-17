@@ -1,0 +1,155 @@
+from os import listdir
+from skimage.transform import rotate
+from skimage.io import imread
+from skimage.color import rgb2gray
+from scipy.signal import find_peaks
+from scipy.optimize import curve_fit
+from scipy.stats import poisson
+import numpy as np
+import multiprocessing as mp
+import matplotlib.pyplot as plt
+import os
+import czifile
+
+#from custom_functions import read_usr_input
+
+
+#DAPI wells
+path = "D:\\Data\\251117_Exp004-E\\D2-confocal"
+well_name = ["B11", "B10", "B9", "C9", "C10", "C11", "D11", "D10", "D9", "E9", "E10", "E11", "F11", "F10", "F9", "G9", "G10", "G11"]
+well_number = [0, 1, 2, 3, 4, 5, 6, 7, 8, 0, 1, 2, 3, 4, 5, 6, 7, 8]
+well_concentration = [10, 10, 10, 25, 25, 25, 50, 50, 50, 10, 10, 10, 25, 25, 25, 50, 50, 50]
+fig_name = "Cross-talk of DAPI on"
+concentration_unit = "µg/mL"
+ch_interest = ["gfp", "cy3"]
+img_alive = np.array(czifile.imread(f"D:\\Data\\251117_Exp004-E\\D2-confocal\\Exp004-E_G9_DAPI-alive_x10_GFP-Cy3-BF-DAPI_16bit-1024-n4-s7_2025_11_19__16_31_37.czi"))
+print(img_alive.shape)
+img_dead = np.array(czifile.imread(f"D:\\Data\\251117_Exp004-E\\D2-confocal\\Exp004-E_G9_DAPI-dead_x10_GFP-Cy3-BF-DAPI_16bit-1024-n4-s7_2025_11_19__16_49_23.czi")) #Comment if alive and dead pictures was made during same aquisition
+#PI wells
+# path = "D:\\Data\\Exp003-E\\D2-Confocal"
+# well_name = ["E3", "B4", "E4", "E8", "B9", "E9"]
+# well_number = [4, 5, 8, 4, 5, 8, 0, 1, 2, 0, 1, 2, 3, 6, 7, 3, 6, 7]
+# well_concentration = [3, 15, 30, 3, 15, 30]
+# fig_name = "Cross-talk of PI at D1 on"
+# concentration_unit = "µM"
+# ch_interest = ["dapi", "gfp"]
+# # img_alive = np.array(imread(f"D:\\Data\\Exp003-E\\D7\\Exp003-E_D7_PI-alive_1\\Exp003-E_D7_PI-alive_1_MMStack_E3-Site_0.ome.tif"))
+# # img_dead = np.array(imread(f"D:\\Data\\Exp003-E\\D7\\Exp003-E_D7_PI-dead_1\\Exp003-E_D7_PI-dead_1_MMStack_B9-Site_0.ome.tif")) #Comment if alive and dead pictures was made during same aquisition
+# #Calcein AM wells
+# path = "D:\\Data\\Exp003-E\\D2-Confocal"
+# well_name = ["B5", "E5", "B6", "B10", "E10", "B11"]
+# well_number = [1, 2, 5, 1, 2, 5, 6, 7, 8, 6, 7, 8, 0, 3, 4, 0, 3, 4]
+# well_concentration = [0.5, 2.5, 10, 0.5, 2.5, 10]
+# fig_name = "Cross-talk of Calcein at D2 on"
+# concentration_unit = "µM"
+# ch_interest = ["dapi", "cy3"]
+# # img_alive = np.array(imread(f"D:\\Data\\Exp003-E\\D7\\Exp003-E_D7_Calcein-alive_1\\Exp003-E_D7_Calcein-alive_1_MMStack_B5-Site_0.ome.tif"))
+# # img_dead = np.array(imread(f"D:\\Data\\Exp003-E\\D7\\Exp003-E_D7_Calcein-dead_1\\Exp003-E_D7_Calcein-dead_1_MMStack_B10-Site_0.ome.tif")) #Comment if alive and dead pictures was made during same aquisition
+
+
+ch = ["gfp", "dapi", "cy3"]
+ch_order = [0, 3, 1]
+ch_color = ['g', 'b', 'r']
+
+fig=[elt for elt in ch_interest]
+ax=[elt for elt in ch_interest]
+
+
+def gauss_fit(x, *params):
+    """Apply gaussian function on x values using the params as parameters"""
+
+    y = np.zeros_like(x)
+    for i in range(0, len(params), 3):
+        ctr = params[i]
+        amp = params[i+1]
+        wid = params[i+2]
+        y = y + amp * np.exp( -((x - ctr)/wid)**2)
+    return y
+
+for c_i,c in enumerate(ch_interest):
+    print(f"Channel {c}")
+
+    # fig[c_i], ax[c_i] = plt.subplots(nrows=3, ncols=6, sharey='row', sharex='col', num=f"{fig_name} {c}")
+    fig[c_i], ax[c_i] = plt.subplots(nrows=6, ncols=3, sharey='row', sharex='col', num=f"{fig_name} {c}")
+    fig[c_i].suptitle(f"{fig_name} {c}")
+
+    fluo_thresh = []
+
+    rr=0
+    cc=0
+    alive_dead = 0
+    for w_i, w in enumerate(well_name):
+
+        if w_i % 3 == 0: #w_i % 6 == 0:
+            cc=0
+            if w_i != 0:
+                rr+=1
+        elif w_i % 3 != 0:#w_i % 6 != 0:
+            cc+=1
+        print(w_i, rr, cc)
+
+        #Comment if acquisition was done for alive and dead at the same time
+        if w_i % 3 == 0 and w_i != 0:
+            alive_dead +=1
+
+        print(f"Well {w} (pos {well_number[w_i]}) - {well_concentration[w_i]}{concentration_unit}")
+        # print(f"Well {w}")
+        # ax[c_i][0, w_i].imshow(img[well_number[w_i], : , :, ch_order[ch.index[c]]])
+        # ax[c_i][0, w_i].set_title(f"{c} channel, no dyes")
+
+        #Open picture
+        # files = listdir(path)
+        # current_file = [f for f in files if w in f]
+        # print(current_file)
+        # img_alive = np.array(imread(path + "\\" + current_file[0]))
+
+        #Get histogram with 255 bins in range 0:1
+        if len(img_alive.shape) == 4: #Stack of all pictures + all chans
+            if alive_dead % 2 == 0:
+                print("alive")
+                fluo = ax[c_i][rr, cc].hist(img_alive[well_number[w_i], : , :,  ch_order[ch.index(c)]].flatten(), bins=255, range=[0, 5000])
+            else:
+                print("dead")
+                fluo = ax[c_i][rr, cc].hist(img_dead[well_number[w_i], : , :,  ch_order[ch.index(c)]].flatten(), bins=255, range=[0, 5000])
+        elif len(img_alive.shape) == 9:
+            if alive_dead % 2 == 0:
+                fluo = ax[c_i][rr, cc].hist(img_alive[0 , 0, well_number[w_i], ch_order[ch.index(c)], 0, 0, :, :, 0].flatten(), bins=255, range=[0, 5000])
+            else:
+                fluo = ax[c_i][rr, cc].hist(img_dead[0 , 0, well_number[w_i], ch_order[ch.index(c)], 0, 0, :, :, 0].flatten(), bins=255, range=[0, 5000])
+        else: #each picture is independant but contains all chans
+            fluo = ax[c_i][rr, cc].hist(img_alive[: , :,  ch_order[ch.index(c)]].flatten(), bins=255, range=[0, 5000])
+
+
+        #Find the highest peak
+        peak = [fluo[1][fluo[0].tolist().index(max(fluo[0]))] , max(fluo[0])]
+        ax[c_i][rr, cc].scatter(peak[0], peak[1], c=ch_color[ch.index(c)], marker='x')
+        print(f"Peak (x,y): {peak}")
+
+        #Create the x axis for fit
+        x=np.zeros(len(fluo[0]))
+        for dx in range(len(fluo[0])):
+            x[dx]=fluo[1][dx]+((fluo[1][dx+1]-fluo[1][dx])/2)
+
+        #First fit high peak
+        guess = [
+            peak[0], #center of gaussian
+            peak[1], #amplitude
+            peak[0]+1 #FWHM
+            ]
+        try:
+            popt, pcov = curve_fit(gauss_fit, x, fluo[0], p0=guess)
+        except:
+            popt = guess
+        
+        #Noise threshold
+        noise_thresh = round(popt[0] + 5*popt[2])
+        fluo_thresh.append(noise_thresh)
+
+        fit = gauss_fit(x, *popt)
+        ax[c_i][rr, cc].set_title(f"{w}, {well_concentration[w_i]}{concentration_unit}")
+        ax[c_i][rr, cc].plot(x, fit, c=ch_color[ch.index(c)], linestyle=':')
+        ax[c_i][rr, cc].plot([noise_thresh, noise_thresh], [0, 800000], c=ch_color[ch.index(c)])
+        ax[c_i][rr, cc].annotate(f"{noise_thresh}", xy=(noise_thresh+0.02, 800000), color=ch_color[ch.index(c)])
+        # ax[1,i].set_title(f"Histogram and fit of {c} fluoresent channel")
+
+plt.show()

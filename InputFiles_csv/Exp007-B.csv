@@ -1,0 +1,17 @@
+﻿Path,C:\Users\ChimieENS\Documents\Layla\Data\251023_Exp007-B,,,,,,
+Pattern,ExpName_Day_Substrate_0,,,,,,
+ExpName,Exp007-B,,,,,,
+,,,,,,,
+Substrates,Days,Design,Dimension,Angle,Aquisition order,Microscope,Magnification
+H2M100,D0,H2M100,1944x2592,0,bottom,Leica,x5
+H2M100,D1,H2M100,1944x2592,0,bottom-flip,Leica,x5
+H2M100,D4,H2M100,1944x2592,0,bottom-flip,Leica,x5
+H2M100,D6,H2M100,1944x2592,0,bottom-flip,Leica,x5
+H2M100,D8,H2M100,1944x2592,0,bottom-flip,Leica,x5
+H2M100,D11,H2M100,1944x2592,0,bottom-flip,Leica,x5
+H2M150,D0,H2M150,1944x2592,0,bottom,Leica,x5
+H2M150,D1,H2M150,1944x2592,0,bottom-flip,Leica,x5
+H2M150,D4,H2M150,1944x2592,0,bottom-flip,Leica,x5
+H2M150,D6,H2M150,1944x2592,0,bottom-flip,Leica,x5
+H2M150,D8,H2M150,1944x2592,0,bottom-flip,Leica,x5
+H2M150,D11,H2M150,1944x2592,0,bottom-flip,Leica,x5

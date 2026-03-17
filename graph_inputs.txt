@@ -1,0 +1,6 @@
+Path= C:\Users\ChimieENS\Documents\Layla\Data\250828-Exp006-B, 
+Outpath= C:\Users\ChimieENS\Documents\Layla\Data\250828-Exp006-B\Exp006-test_stats.csv
+Days= D6, D11, D18
+Substrate= H2M100-ShortFlip, H2M150-ShortFlip
+Condition= Exp006-B, Exp006-B
+Graph= 0, 

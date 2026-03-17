@@ -1,0 +1,258 @@
+from os import listdir
+from skimage.transform import rotate
+from skimage.io import imread, imsave
+from skimage.color import rgb2gray
+from skimage.filters import gaussian, threshold_otsu, threshold_multiotsu
+from skimage.measure import regionprops, label
+from skimage.morphology import binary_erosion, ellipse, area_closing, binary_dilation
+from skimage.exposure import rescale_intensity
+from scipy.signal import find_peaks
+from scipy.optimize import curve_fit
+from scipy.stats import poisson
+import pandas as pd
+import numpy as np
+import multiprocessing as mp
+import matplotlib.pyplot as plt
+import seaborn as sns
+import os
+import czifile
+
+#from custom_functions import read_usr_input
+
+out_path = "D:\\Data\\251117_Exp004-E\\Analysis"
+microscope = "Zeiss Confocal microscope"
+mag = "x10"
+
+#DAPI wells
+path = "D:\\Data\\251117_Exp004-E\\D2-confocal"
+well_name = ["B11", "B10", "B9", "C9", "C10", "C11", "D11", "D10", "D9", "E9", "E10", "E11", "F11", "F10", "F9", "G9", "G10", "G11"]
+well_number = [0, 1, 2, 3, 4, 5, 6, 7, 8, 0, 1, 2, 3, 4, 5, 6, 7, 8]
+well_concentration = [10, 10, 10, 25, 25, 25, 50, 50, 50, 10, 10, 10, 25, 25, 25, 50, 50, 50]
+well_state = ["alive", "alive", "alive", "alive", "alive", "alive","alive", "alive", "alive", "dead", "dead", "dead", "dead", "dead", "dead", "dead", "dead", "dead"]
+fig_name = "Fluo signal of DAPI on"
+concentration_unit = "µg/mL"
+ch_interest = ["dapi"]
+dye="DAPI"
+img_alive = np.array(czifile.imread(f"D:\\Data\\251117_Exp004-E\\D2-confocal\\Exp004-E_G9_DAPI-alive_x10_GFP-Cy3-BF-DAPI_16bit-1024-n4-s7_2025_11_19__16_31_37.czi"))
+img_dead = np.array(czifile.imread(f"D:\\Data\\251117_Exp004-E\\D2-confocal\\Exp004-E_G9_DAPI-dead_x10_GFP-Cy3-BF-DAPI_16bit-1024-n4-s7_2025_11_19__16_49_23.czi")) #Comment if alive and dead pictures was made during same aquisition
+#PI wells
+# path = "D:\\Data\\Exp003-E\\D2-Confocal"
+# well_name = ["B2", "B3", "E2", "B7", "B8", "E7"]
+# well_number = [1, 2, 5, 1, 2, 5, 0, 3, 4, 0, 3, 4, 6, 7, 8, 6, 7, 8]
+# well_concentration = [1, 4.38, 10, 1, 4.38, 10]
+# well_state = ["alive", "alive", "alive", "dead", "dead", "dead"]
+# fig_name = "Fluo signal of DAPI at D2 on"
+# concentration_unit = "µg/mL"
+# dye="DAPI"
+# ch_interest = ["dapi"]
+# img_alive = np.array(imread(f"D:\\Data\\Exp003-E\\D1\\Exp003-E_2\\Exp003-E_2_MMStack_B2-Site_0.ome.tif"))
+# img_dead = np.array(imread(f"D:\\Data\\Exp003-E\\D7\\Exp003-E_D7_DAPI-dead_1\\Exp003-E_D7DAPI-dead_1_MMStack_B7-Site_0.ome.tif")) #Comment if alive and dead pictures was made during same aquisition
+# #PI wells
+# path = "D:\\Data\\Exp003-E\\D2-Confocal"
+# well_name = ["E3", "B4", "E4", "E8", "B9", "E9"]
+# well_number = [4, 5, 8, 4, 5, 8, 0, 1, 2, 0, 1, 2, 3, 6, 7, 3, 6, 7]
+# well_concentration = [3, 15, 30, 3, 15, 30]
+# well_state = ["alive", "alive", "alive", "dead", "dead", "dead"]
+# fig_name = "Fluo signal of PI at D2 on"
+# concentration_unit = "µM"
+# dye="PI"
+# ch_interest = ["cy3"]
+# img_alive = np.array(imread(f"D:\\Data\\Exp003-E\\D1\\Exp003-E_2\\Exp003-E_2_MMStack_B2-Site_0.ome.tif"))
+# img_dead = np.array(imread(f"D:\\Data\\Exp003-E\\D7\\Exp003-E_D7_PI-dead_1\\Exp003-E_D7_PI-dead_1_MMStack_B9-Site_0.ome.tif")) #Comment if alive and dead pictures was made during same aquisition
+#Calcein AM wells
+# path = "D:\\Data\\Exp003-E\\D2-Confocal"
+# well_name = ["B5", "E5", "B6", "B10", "E10", "B11"]
+# well_number = [1, 2, 5, 1, 2, 5, 6, 7, 8, 6, 7, 8, 0, 3, 4, 0, 3, 4]
+# well_concentration = [0.5, 2.5, 10, 0.5, 2.5, 10]
+# well_state = ["alive", "alive", "alive", "dead", "dead", "dead"]
+# fig_name = "Fluo signal of Calcein at D2 on "
+# concentration_unit = "µM"
+# dye="Calcein"
+# ch_interest = ["gfp"]
+# img_alive = np.array(imread(f"D:\\Data\\Exp003-E\\D1\\Exp003-E_2\\Exp003-E_2_MMStack_B5-Site_0.ome.tif"))
+# img_dead = np.array(imread(f"D:\\Data\\Exp003-E\\D7\\Exp003-E_D7_Calcein-dead_1\\Exp003-E_D7_Calcein-dead_1_MMStack_B10-Site_0.ome.tif")) #Comment if alive and dead pictures was made during same aquisition
+
+ch = ["gfp", "dapi", "cy3"]
+ch_order = [0, 3, 1]
+ch_color = ['g', 'b', 'r']
+cell_organelle_size = [78, 30, 78] # blue for nuclei d=6µm, green and red for entire cell d=10
+
+fig=[elt for elt in ch_interest]
+ax=[elt for elt in ch_interest]
+
+if microscope == "Zeiss Confocal microscope":
+    if mag == "x10":
+        um2pxl = 0.7227
+if microscope == "Zeiss Incubator microscope":
+    if mag == "x10":
+        um2pxl = 1.5823
+
+def gauss_fit(x, *params):
+    """Apply gaussian function on x values using the params as parameters"""
+
+    y = np.zeros_like(x)
+    for i in range(0, len(params), 3):
+        ctr = params[i]
+        amp = params[i+1]
+        wid = params[i+2]
+        y = y + amp * np.exp( -((x - ctr)/wid)**2)
+    return y
+
+for c_i,c in enumerate(ch_interest):
+    print(f"Channel {c}")
+
+    fig[c_i], ax[c_i] = plt.subplots(nrows=7, ncols=18, sharey='row', sharex='col', num=f"{fig_name} {c}")
+    fig[c_i].suptitle(f"{fig_name} {c}")
+
+    data = pd.DataFrame() #will hold the output data
+
+    alive_dead = 0
+    for w_i, w in enumerate(well_name):
+
+        #Comment if acquisition was done for alive and dead at the same time
+        if w_i % 9 == 0 and w_i != 0:
+            alive_dead +=1
+
+        # #Open picture
+        # files = listdir(path)
+        # current_file = [f for f in files if w in f]
+        # print(current_file)
+        # img_alive = np.array(imread(path + "\\" + current_file[0]))
+
+        #Dispplay each step name on figure
+        if w_i == 0:
+            ax[c_i][0, w_i].set_ylabel("Original image")
+            ax[c_i][1, w_i].set_ylabel("Background image")
+            ax[c_i][2, w_i].set_ylabel("Denoised image")
+            ax[c_i][3, w_i].set_ylabel("Otsu Thresholded image")
+            ax[c_i][4, w_i].set_ylabel("Errosion-dilation ellipse(4,4)")
+            ax[c_i][5, w_i].set_ylabel("Labeled image")
+            ax[c_i][6, w_i].set_ylabel("Labeled imaged after removing object smaller than 300pxl*pxl")
+
+
+        print(f"Well {w} (pos {well_number[w_i]}) - {well_concentration[w_i]}{concentration_unit}")
+
+        #Display original image
+        if len(img_alive.shape) == 4:
+            ax[c_i][0, w_i].imshow(img_alive[well_number[w_i], : , :, ch_order[ch.index(c)]], cmap='gray')
+        elif len(img_alive.shape) == 9:
+            if alive_dead % 2 == 0:
+                ax[c_i][0, w_i].imshow(img_alive[0 , 0, well_number[w_i], ch_order[ch.index(c)], 0, 0, :, :, 0], cmap='gray')
+            else:
+                ax[c_i][0, w_i].imshow(img_dead[0 , 0, well_number[w_i], ch_order[ch.index(c)], 0, 0, :, :, 0], cmap='gray')
+        else:
+            ax[c_i][0, w_i].imshow(img_alive[:, :, ch_order[ch.index(c)]], cmap='gray')
+        ax[c_i][0, w_i].set_title(f"{w} well - {well_concentration[w_i]}{concentration_unit}")
+        
+        #Compute background image
+        if len(img_alive.shape) == 4:
+            bkgd = gaussian(img_alive[well_number[w_i], : , :, ch_order[ch.index(c)]], sigma=200, preserve_range=True)
+            print(img_alive[well_number[w_i], : , :, ch_order[ch.index(c)]].dtype, bkgd.dtype)
+        elif len(img_alive.shape) == 9:
+            if alive_dead % 2 == 0:
+                bkgd = gaussian(img_alive[0 , 0, well_number[w_i], ch_order[ch.index(c)], 0, 0, :, :, 0], sigma=200, preserve_range=True)
+            else:
+                bkgd = gaussian(img_dead[0 , 0, well_number[w_i], ch_order[ch.index(c)], 0, 0, :, :, 0], sigma=200, preserve_range=True)
+        else:
+            bkgd = gaussian(img_alive[: , :, ch_order[ch.index(c)]], sigma=200, preserve_range=True)
+        ax[c_i][1, w_i].imshow(bkgd)
+
+        #Remove background image
+        if len(img_alive.shape) == 4:
+            denoised = img_alive[well_number[w_i], : , :, ch_order[ch.index(c)]] / 1#bkgd
+        elif len(img_alive.shape) == 9:
+            if alive_dead % 2 == 0:
+                denoised = img_alive[0 , 0, well_number[w_i], ch_order[ch.index(c)], 0, 0, :, :, 0] - bkgd
+            else:
+                denoised = img_dead[0 , 0, well_number[w_i], ch_order[ch.index(c)], 0, 0, :, :, 0] - bkgd
+        else:
+            denoised = img_alive[: , :, ch_order[ch.index(c)]] / bkgd
+        ax[c_i][2, w_i].imshow(denoised, cmap='gray')
+
+        #Otsu automatic threshold for two groups
+        otsu = threshold_multiotsu(denoised, 3)
+        thresh = denoised >= otsu[0]
+        print('otsu=', otsu)
+        ax[c_i][3, w_i].imshow(thresh)
+
+        #Erode a bit the picture
+        thresh = binary_erosion(thresh, footprint=ellipse(round(2*um2pxl), round(2*um2pxl))) #ellipse(4,4) for Zeis Incubator #ellipse(1,1) for Zeis confocal
+        ax[c_i][4, w_i].imshow(thresh)
+
+        #Label
+        labels = label(thresh)
+        ax[c_i][5, w_i].imshow(labels)
+
+        #Regions
+        if len(img_alive.shape) == 4:
+            regions = regionprops(labels, intensity_image=img_alive[well_number[w_i], : , :, ch_order[ch.index(c)]])
+        elif len(img_alive.shape) == 9:
+            if alive_dead % 2 == 0:
+                regions = regionprops(labels, intensity_image=img_alive[0 , 0, well_number[w_i], ch_order[ch.index(c)], 0, 0, :, :, 0])
+            else:
+                regions = regionprops(labels, intensity_image=img_dead[0 , 0, well_number[w_i], ch_order[ch.index(c)], 0, 0, :, :, 0])
+        else:
+            regions = regionprops(labels, intensity_image=img_alive[: , :, ch_order[ch.index(c)]])
+
+        #Store info of labels & regions not satisfying requirements
+        to_rm = []
+        print(f"Area > {cell_organelle_size[ch.index(c)]} µm (ie > {cell_organelle_size[ch.index(c)]*um2pxl} pxl)")
+        for rg in regions:
+            if rg.label == 0 or rg.area < 0.8*cell_organelle_size[ch.index(c)]*um2pxl: #80% of nuclei size
+                to_rm.append(rg.label)
+        for elt in sorted(to_rm, reverse=True):
+                del(regions[elt-1])
+                labels[(labels == elt)] = 0
+        ax[c_i][6, w_i].imshow(labels)
+
+        #Extract info & store it in one main file
+        n_cell = len(regions)
+        print(f"{n_cell} have been counted")
+        tmp_df = pd.DataFrame({"Well Name": w, "Dye": dye, "Dye Concentration": well_concentration[w_i],
+                               "Well State": well_state[w_i], "Microscope": microscope, "Magnification": mag, 
+                               "Areas": [rg.area for rg in regions], 
+                               f"{c} Mean Intensity": [rg.intensity_mean for rg in regions],
+                               f"{c} Std Intensity": [rg.intensity_std for rg in regions]})
+        if len(data) > 0:
+            data = pd.concat([data, tmp_df])
+        else:
+            data = tmp_df
+
+        #Display & save segmentation
+        fig2, ax2 = plt.subplots()
+        fig2.set_size_inches(20, 20)
+        if len(img_alive.shape) == 4:
+            img_shape = img_alive[well_number[w_i], : , :, ch_order[ch.index(c)]].shape
+        elif len(img_alive.shape) == 9:
+            img_shape = img_alive[0 , 0, well_number[w_i], ch_order[ch.index(c)], 0, 0, :, :, 0].shape
+        else:
+            img_shape = img_alive[: , :, ch_order[ch.index(c)]].shape
+        overlay = np.zeros((img_shape[0], img_shape[1], 3), dtype=np.uint8)
+        if len(img_alive.shape) == 4:
+            img8bit = rescale_intensity(img_alive[well_number[w_i], : , :, ch_order[ch.index(c)]], in_range=(0, 2**16-1), out_range=(0, 2**8-1)) #rescale intenisty to have 8bit for RGB format
+        elif len(img_alive.shape) == 9:
+            if alive_dead % 2 == 0:
+                img8bit = rescale_intensity(img_alive[0 , 0, well_number[w_i], ch_order[ch.index(c)], 0, 0, :, :, 0], in_range=(0, 2**16-1), out_range=(0, 2**8-1))
+            else:
+                img8bit = rescale_intensity(img_dead[0 , 0, well_number[w_i], ch_order[ch.index(c)], 0, 0, :, :, 0], in_range=(0, 2**16-1), out_range=(0, 2**8-1))
+        else:
+            img8bit = rescale_intensity(img_alive[: , :, ch_order[ch.index(c)]], in_range=(0, 2**16-1), out_range=(0, 2**8-1)) #rescale intenisty to have 8bit for RGB format
+        img8bit = img8bit.astype('uint8')
+        labels[labels > 0] = 255 #transform label to a 8bit image
+        labels = labels.astype('uint8')
+        #Overlay: original picture in white, segmentation in cyan
+        overlay[:,:,0] = img8bit #R
+        overlay[:,:,1] = img8bit + labels*0.2 #G
+        overlay[:,:,2] = img8bit + labels*0.2 #B
+        ax2.imshow(overlay)
+        #Add the centroid of each segmented cells as white dot
+        [ax2.scatter(rg.centroid[1], rg.centroid[0], marker='.', color='w', s=0.5) for rg in regions if rg.label != 0 ]
+        #Save figure
+        fig2.savefig(out_path + '\\Overlay_'+ w +'.jpeg')
+        plt.close(fig2)
+
+    #Save file containing data
+    data.to_csv(out_path + "\\" + "Results_" + fig_name + " " + c + ".csv")
+    
+
+plt.show()
