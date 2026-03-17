@@ -1,9 +1,0 @@
-﻿Path,C:\Users\ChimieENS\Documents\Layla\Data\250703-Exp001-B,,,,,,
-Pattern,ExpName_Substrate_Day_0,,,,,,
-ExpName,Exp001-B,,,,,,
-,,,,,,,
-Substrates,Days,Design,Dimension,Angle,Aquisition order,Microscope,Magnification
-CondA,D1,H2M200,1944x2592,0,exp001,Leica,x5
-CondA,D4,H2M200,1944x2592,0,bottom,Leica,x5
-CondB,D1,H2M200,1944x2592,20,bottom,Leica,x5
-CondB,D4,H2M200,1944x2592,20,bottom,Leica,x5

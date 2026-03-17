@@ -1,3 +1,8 @@
 Book1.csv
 ExpL.csv
 test.py
+.venv/
+logs/
+User_Inputs/
+test.py
+Exp01.py
