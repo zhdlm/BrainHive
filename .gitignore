@@ -6,3 +6,5 @@ logs/
 User_Inputs/
 test.py
 Exp01.py
+*.npy
+Test3D-40x/
