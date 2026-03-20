@@ -10,6 +10,8 @@ from skimage.morphology import binary_erosion, remove_small_objects, binary_clos
 from skimage.morphology import disk, ellipse
 from skimage.measure import label
 from skimage.draw import line_nd
+from cv2 import findContours, arcLength, approxPolyDP, drawContours, imwrite, RETR_CCOMP, CHAIN_APPROX_NONE, imwrite
+from scipy.ndimage import generate_binary_structure, binary_erosion, binary_closing, binary_opening, binary_dilation
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 from matplotlib import cm
@@ -122,7 +124,7 @@ dims = (full_stack.shape[2], full_stack.shape[3])
 endo_stack = full_stack[fluo_chans.index(fluo_endo), z_start:z_end, :, :]
 depth = endo_stack.shape[0]
 del full_stack
-np.save("endo_stack.npy", endo_stack)
+# np.save("endo_stack.npy", endo_stack)
 
 print("\n--------------------------------")
 print("\tLOADING IMAGE")
@@ -168,7 +170,7 @@ if anisotropy != 1:
     del img, resampler, new_spacing
 else:
     endo_stack_iso = endo_stack.copy()
-np.save("endo_stack_iso.npy", endo_stack_iso)
+# np.save("endo_stack_iso.npy", endo_stack_iso)
 
 
 
@@ -176,35 +178,32 @@ np.save("endo_stack_iso.npy", endo_stack_iso)
 #------------------------------------------------------
 
 endo_stack_contrast = equalize_adapthist(endo_stack_iso)
-np.save("endo_stack_contrast.npy", endo_stack_contrast)
+# np.save("endo_stack_contrast.npy", endo_stack_contrast)
 # np.save("endo_stack_contrast.npy", endo_stack_contrast)
 print(f"Improve local contrast using CLAHE (kernel_size=1/8width, clip_lim=0.01, nbins=256)")
 
 #2.c Vessel Enhancement (sato seems better than frangi) --> REALLY LONG STEP !!!
 #------------------------------------------------------
 
-vessel_diam = range(2, 15)
+vessel_diam = range(1, 10)
 vessel_diam_pxl = [round(xy_pxl2um*elt/2, 1) for elt in vessel_diam]
 print(f"Vessel Diameter searched (µm): {vessel_diam}\n\tsearched in pxl: {vessel_diam_pxl}")
 print("Vessel enhancement. WARNING: This step is quite long to execute.")
 start = time.time()
-endo_vessel_sato_optisigma2_15 = sato(endo_stack_contrast, sigmas=vessel_diam_pxl, black_ridges=False)
-np.save("endo_vessel_sato_1-15um.npy", endo_vessel_sato_optisigma2_15)
-del endo_vessel_sato_optisigma2_15
-
-quit()
+endo_vessel_sato = sato(endo_stack_contrast, sigmas=vessel_diam_pxl, black_ridges=False)
+# np.save("endo_vessel_sato_2-15um.npy", endo_vessel_sato_optisigma2_15)
 
 runtime = time.time() - start
 print(f"Sato runtime={runtime}")
-print("--------------------------------")
+# print("--------------------------------")
 
-##########################################################
-# 3. THRESHOLD
-##########################################################
+# ##########################################################
+# # 3. THRESHOLD
+# ##########################################################
 
 otsu_thresh = threshold_otsu(endo_vessel_sato)
 endo_vessel_thresh = endo_vessel_sato > otsu_thresh
-np.save("endo_vessel_thresh.npy", endo_vessel_thresh)
+# np.save(name, stack_thresh)
 print("\n--------------------------------")
 print("\tTHRESHOLD")
 print(f"Otsu Thesrhold: otsu={otsu_thresh}")
@@ -218,28 +217,33 @@ print("--------------------------------")
 #4.a Filter mask based on morphology
 #-----------------------------------
 
-#Area closing
-endo_vessel_close = np.stack([binary_closing(slice, footprint=ellipse(2,4)) for slice in endo_vessel_thresh])
-#Removing small objects
-endo_vessel_no_small = remove_small_objects(endo_vessel_close, min_size=100, connectivity=2)
-#Erosion
-endo_vessel_erosion = np.stack([binary_erosion(slice, footprint=disk(1)) for slice in endo_vessel_no_small])
-np.save("endo_vessel_cl_no_ero.npy", endo_vessel_erosion)
-np.save("endo_vessel_cl_no.npy", endo_vessel_no_small)
+def generate_ellipsoid_structure(rx, ry, rz):
+    """
+    Create a 3D ellipsoidal structuring element.
+
+    rx, ry, rz = radii along x, y, z
+    """
+    z, y, x = np.ogrid[-rz:rz+1, -ry:ry+1, -rx:rx+1]
+
+    ellipsoid = (x**2 / rx**2 +
+                 y**2 / ry**2 +
+                 z**2 / rz**2) <= 1
+
+    return ellipsoid.astype(np.uint8)
 
 #dilation, closing removing small
-endo_vessel_dil = np.stack([binary_dilation(slice, footprint=ellipse(1,2)) for slice in endo_vessel_thresh])
-endo_vessel_close = np.stack([binary_closing(slice, footprint=ellipse(2,4)) for slice in endo_vessel_dil])
-endo_vessel_no_small = remove_small_objects(endo_vessel_close, min_size=100, connectivity=2)
-endo_vessel_erosion = np.stack([binary_erosion(slice, footprint=disk(2)) for slice in endo_vessel_no_small])
-np.save("endo_vessel_dil_cl_no_ero.npy", endo_vessel_erosion)
-np.save("endo_vessel_dil_cl_no.npy", endo_vessel_no_small)
+ellipse_1_2 = generate_ellipsoid_structure(1,2,1)
+ellipse_2_4 = generate_ellipsoid_structure(2,4,2)
+endo_vessel_dil = binary_dilation(endo_vessel_thresh, ellipse_1_2)
+endo_vessel_close = binary_closing(endo_vessel_thresh, ellipse_2_4)
+endo_vessel_no_small = remove_small_objects(endo_vessel_close, min_size=150, connectivity=2)
+#np.save("endo_vessel_no_small_bin_scipy.npy", endo_vessel_no_small)
 
-quit()
+# # endo_vessel_bin = endo_vessel_no_small
 
-print("\n--------------------------------")
-print("\tMORPHOLOGY FILTERING\nclosing (2,4) > remove small objects > erosion (1)")
-print("--------------------------------")
+# print("\n--------------------------------")
+# print("\tMORPHOLOGY FILTERING\ndil (1,2) > close (2,4) > remove small objects <100pxl²")
+# print("--------------------------------")
 
 #4.b Extract metrics: area occupied (total and per slice)
 #--------------------------------------------------------
@@ -266,10 +270,16 @@ def skeletons_to_volume(skeletons, shape, anisotropy):
 
     return vol
 
-    
-skeleton_kimi = kimimaro.skeletonize(label(endo_vessel_bin), anisotropy=(z_pxl2um, xy_pxl2um, xy_pxl2um))
-skeleton_stack = skeletons_to_volume(skeleton_kimi, endo_vessel_bin.shape, (z_pxl2um, xy_pxl2um, xy_pxl2um))
-np.save("skeleton_stack.npy", skeleton_stack)
+endo_vessel_bin = np.load("endo_vessel_no_small_bin_scipy.npy")
+teasar_param = kimimaro.intake.DEFAULT_TEASAR_PARAMS.copy()
+teasar_param.update({
+    "scale": 1, #defines skeleton detail (high value for less detail)
+    "const": 50, # control path pruning during TEASAR algo
+    "pdrf_scale": 1e4, "pdrf_exponent": 2, # how much branch are penalized if close to edge of object (low values = low penalty)
+    "soma_detection_threshold": 0 #mostly relevant for neurons
+    })
+skeleton_kimi = kimimaro.skeletonize(label(endo_vessel_bin), anisotropy=(1,1,1), dust_threshold=0, teasar_params=teasar_param, fix_branching=False)
+skeleton_stack = skeletons_to_volume(skeleton_kimi, endo_vessel_bin.shape, (1,1,1))
 
 skel_proj_kimi = np.zeros(dims, dtype=np.uint8)
 for i in range(depth): 
