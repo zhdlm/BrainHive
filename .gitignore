@@ -1,5 +1,4 @@
-Book1.csv
-ExpL.csv
+*.csv
 test.py
 .venv/
 logs/

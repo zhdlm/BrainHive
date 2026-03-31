@@ -1,5 +1,6 @@
 import numpy as np
 import napari
+import os
 
 # endo_stack = np.load("endo_stack.npy")
 # viewer0 = napari.Viewer()
@@ -25,40 +26,22 @@ import napari
 # # viewer4 = napari.Viewer()
 # viewer2.add_image(skeleton_stack, name='skeleton')
 
+path = r"C:\Users\ChimieENS\Documents\Layla\Data\251117_Exp004-E\D14-confocal-analysis"
+
 viewer = napari.Viewer()
-endo_stack_contrast  = np.load("endo_stack_contrast.npy")
-viewer.add_image(endo_stack_contrast, name='contrast')
-# endo_vessel_sato_10pxl = np.load("endo_vessel_sato_1-10pxl.npy")
-# viewer.add_image(endo_vessel_sato_10pxl, name='1-10pxl')
-# endo_vessel_sato_10um = np.load("endo_vessel_sato_1-10um.npy")
-# viewer.add_image(endo_vessel_sato_10um, name='1-10um')
-# endo_vessel_sato_10um = np.load("endo_vessel_sato_1-10um.npy")
-# viewer.add_image(endo_vessel_sato_10um, name='1-10um')
-# endo_vessel_sato_110um_bin = np.load("endo_vessel_sato_1-10um_dil_cl_no_ero.npy")
-# viewer.add_image(endo_vessel_sato_110um_bin, name='1-10um_mask_ero')
-# endo_vessel_sato_110um_bin_noero = np.load("endo_vessel_sato_1-10um_dil_cl_no.npy")
-# viewer.add_image(endo_vessel_sato_110um_bin_noero, name='1-10um_mask_noero')
-endo_vessel_no_small_bin_scipy = np.load("endo_vessel_no_small_bin_scipy.npy")
-viewer.add_image(endo_vessel_no_small_bin_scipy, name='mask_sato_scipy')
-# skeleton_ski = np.load("skeleton_stack_1-10um_dil_cl_no.npy")
-# viewer.add_image(skeleton_ski, name='skeleton_skimage')
-# skeleton_sci = np.load("skeleton_stack_scipy.npy")
-# viewer.add_image(skeleton_sci, name='skeleton')
-# skeleton_sci_gs = np.load("skeleton_goodscale_stack_scipy.npy")
-# viewer.add_image(skeleton_sci_gs, name='skeleton_gs')
-skeleton_sci_chat = np.load("skeleton_scipy_chatparam.npy")
-viewer.add_image(skeleton_sci_chat, name='skeleton_chat')
-skeleton_sci_chat_low = np.load("skeleton_scipy_chatparam_low.npy")
-viewer.add_image(skeleton_sci_chat, name='skeleton_chat_low')
-skeleton_sci_chat_noFix = np.load("skeleton_scipy_chatparam_noFix.npy")
-viewer.add_image(skeleton_sci_chat, name='skeleton_chat_noFix')
-# endo_vessel_cl_no = np.load("endo_vessel_cl_no.npy")
-# viewer.add_image(endo_vessel_cl_no, name='cl_no')
-# endo_vessel_cl_no_ero = np.load("endo_vessel_cl_no_ero.npy")
-# viewer.add_image(endo_vessel_cl_no_ero, name='cl_no_ero')
-# endo_vessel_dil_cl_no = np.load("endo_vessel_dil_cl_no.npy")
-# viewer.add_image(endo_vessel_dil_cl_no, name='dil_cl_no')
-# endo_vessel_dil_cl_no_ero = np.load("endo_vessel_dil_cl_no_ero.npy")
-# viewer.add_image(endo_vessel_dil_cl_no_ero, name='dil_cl_no_ero')
+
+iso= np.load(os.path.join(path,"Exp004-E_D-+CHIR-_iso.npy"))
+sato = np.load(os.path.join(path,"Exp004-E_D-+CHIR-_sato.npy"))
+bin = np.load(os.path.join(path,"Exp004-E_D-+CHIR-_bin.npy"))
+viewer.add_image(sato, name="sato")
+viewer.add_image(bin, name="bin")
+
+for s in [3, 3.5, 5]:
+    for c in [0,0.5, 1]:
+        for e in [8]:
+            params = f"s{s}_c{c}_e{e}"
+            name = f"Exp004-E_D-+CHIR-_skeleton_s{s}_c{c}_e{e}.npy"
+            skel = np.load(os.path.join(path, name))
+            viewer.add_image(skel, name=params)
 
 napari.run()

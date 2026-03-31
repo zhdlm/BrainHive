@@ -60,12 +60,16 @@ def flatten_list_recursive(variable_list, final='dict'):
 
     for i,elt in enumerate(variable_list):
         if isinstance(elt, list):
-            elt_out = flatten_list_recursive(elt)
+            elt_out = flatten_list_recursive(elt, final=final)
         else:
             if final == "dict":
                 elt_out = elt.values()
             elif final == "str":
                 elt_out = elt
+            elif final == "int":
+                elt_out = [elt]
+            elif final == "tuple":
+                elt_out = [tuple(elt)]
         
         out_list += elt_out
         
