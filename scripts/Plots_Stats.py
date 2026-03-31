@@ -15,11 +15,14 @@ logger.info(f"{basename(__file__)} | Version={VERSION} | scale_ratio={SCALE_RATI
 user_inputs = uf.read_graph_inputs("User_Inputs/graph_inputs.json")
 
 #2. Open, Combine & Save results
-data = uf.open_results(user_inputs, "UpdatedResults.csv", save=False)
+data = uf.open_results(user_inputs, "*Structure_Results.csv", save=False)
 
 #3. Plot graphic
-uf.plots(data, "Day", "area_filled", "Condition", PlotType.BOXPLOT, z="Experiment", savefig=user_inputs["Outpath"])
+# uf.plots(data, "Condition", "Total length", "Experiment", PlotType.BARPLOT, savefig=user_inputs["Outpath"], scale='log')
+# uf.plots(data, "Condition", "Mean Length", "Experiment", PlotType.BARPLOT, savefig=user_inputs["Outpath"])
+# uf.plots(data, "Condition", "Mean diameter", "Experiment", PlotType.BARPLOT, savefig=user_inputs["Outpath"])
+uf.plots(data, "Condition", "Total volume", "Experiment", PlotType.BARPLOT_SUM, savefig=user_inputs["Outpath"])
 
-#4. Perform statistical tests
-stats, title = uf.conservative_stat_decision_tree(data, "area_filled", ["Condition", "Day", "Experiment"], 'continuous', 'difference', day_dependance='match')
-uf.pretty_print(stats, save=True, path=user_inputs["Outpath"], ttl=title)
+# #4. Perform statistical tests
+# stats, title = uf.conservative_stat_decision_tree(data, "area_filled", ["Condition", "Day", "Experiment"], 'continuous', 'difference', day_dependance='match')
+# uf.pretty_print(stats, save=True, path=user_inputs["Outpath"], ttl=title)

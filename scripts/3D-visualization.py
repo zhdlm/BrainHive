@@ -26,22 +26,23 @@ import os
 # # viewer4 = napari.Viewer()
 # viewer2.add_image(skeleton_stack, name='skeleton')
 
-path = r"C:\Users\ChimieENS\Documents\Layla\Data\251117_Exp004-E\D14-confocal-analysis"
+path = r"C:\Users\ChimieENS\Documents\Layla\Data\20260225-Exp006-E\Plate6\test"
+name = "Exp006-E_Seq1-x20-DeltaZ2um"
 
 viewer = napari.Viewer()
 
-iso= np.load(os.path.join(path,"Exp004-E_D-+CHIR-_iso.npy"))
-sato = np.load(os.path.join(path,"Exp004-E_D-+CHIR-_sato.npy"))
-bin = np.load(os.path.join(path,"Exp004-E_D-+CHIR-_bin.npy"))
-viewer.add_image(sato, name="sato")
-viewer.add_image(bin, name="bin")
+sato = np.load(os.path.join(path, name + "_sato.npy"))
+# bin = np.load(os.path.join(path, name + "_bin.npy"))
+bin2 = np.load(os.path.join(path, name + "_bin2.npy"))
+skel = np.load(os.path.join(path, name + "_skeleton.npy"))
+skelopti = np.load(os.path.join(path, name + "_skeleton_opti.npy"))
+skelfin = np.load(os.path.join(path, name + "_skeleton_final.npy"))
 
-for s in [3, 3.5, 5]:
-    for c in [0,0.5, 1]:
-        for e in [8]:
-            params = f"s{s}_c{c}_e{e}"
-            name = f"Exp004-E_D-+CHIR-_skeleton_s{s}_c{c}_e{e}.npy"
-            skel = np.load(os.path.join(path, name))
-            viewer.add_image(skel, name=params)
+viewer.add_image(sato, name="sato")
+# viewer.add_image(bin, name="bin")
+viewer.add_image(bin2, name="bin2")
+viewer.add_image(skel, name="skel")
+viewer.add_image(skelopti, name="skelopti")
+viewer.add_image(skelfin, name="skelfin")
 
 napari.run()

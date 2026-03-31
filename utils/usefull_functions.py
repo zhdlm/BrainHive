@@ -742,7 +742,10 @@ def swarm_z_on_conditions(ax, data, x, y, conditions, z, markersize=40, width=0.
 
     # Names of grouping variable
     x_names = list(data[x].unique())
-    condition_names = list(data[conditions].unique())
+    if conditions is not None:
+        condition_names = list(data[conditions].unique())
+    else:
+        condition_names = [""]
     z_names = sorted(data[z].unique())
     #Dimension on plot
     box_width = width / len(condition_names)
@@ -755,9 +758,12 @@ def swarm_z_on_conditions(ax, data, x, y, conditions, z, markersize=40, width=0.
     for i, day in enumerate(x_names):
         for j, cond in enumerate(condition_names):
 
-            #Subset 
-            sub = data[(data[x] == day) & (data[conditions] == cond)]
-            
+            #Subset
+            if conditions is None:
+                sub = data[(data[x] == day)]
+            else:
+                sub = data[(data[x] == day) & (data[conditions] == cond)]
+
             if sub.empty:
                 continue
 
@@ -788,7 +794,7 @@ def swarm_z_on_conditions(ax, data, x, y, conditions, z, markersize=40, width=0.
     lgd = ax.legend(handles=cond_handles+z_handles, title="Legend", fontsize=15, title_fontsize=15)
     lgd.set_draggable(True) # to move it on figure
 
-def plots(data: pd.DataFrame, x: str, y: str, conditions: str, plot_type: PlotType, z: str=None, savefig: str=None):
+def plots(data: pd.DataFrame, x: str, y: str, conditions: str, plot_type: PlotType, z: str=None, savefig: str=None, scale='linear'):
     """
     Plots of y variable over time.
 
@@ -812,18 +818,25 @@ def plots(data: pd.DataFrame, x: str, y: str, conditions: str, plot_type: PlotTy
     #     x = "Day Number"
 
     #Create the figure and set the design
-    condition_name = data[conditions].unique()
+    if conditions is not None:
+        condition_name = data[conditions].unique()
+    else:
+        condition_name = ""
     if z != None:
         z_name = data[z].unique()
     else:
         z_name="None"
     ttl = f"{plot_type.value}_x{x}_y{y}_z{",".join(z_name)}_c{",".join(condition_name)}"
     fig, ax = plt.subplots(figsize=(15,10), num=ttl)
-    ax.set_xlabel(set_axis_label(x), fontsize=15)
+    if x is not None:
+        ax.set_xlabel(set_axis_label(x), fontsize=15)
     ax.set_ylabel(set_axis_label(y), fontsize=15)
     ax.set_title(ttl.replace("_", " "))
     for ticks in (*ax.get_xticklabels(), *ax.get_yticklabels()):
         ticks.set_fontsize(15)
+
+    if scale == "log":
+        ax.set_yscale("log")
 
     #Plots
     match plot_type:
@@ -884,6 +897,7 @@ def plots(data: pd.DataFrame, x: str, y: str, conditions: str, plot_type: PlotTy
                 ecolor="gray",
                 capsize=4
             )
+            
         case PlotType.LINE_MEAN:
             if x == "Day":
                 x = "Day Number"
@@ -899,9 +913,21 @@ def plots(data: pd.DataFrame, x: str, y: str, conditions: str, plot_type: PlotTy
                 x = "Day Number"
             sns.swarmplot(data=data, x=x, y=y, hue=conditions)
 
+        case PlotType.BARPLOT:
+            if x == "Day":
+                x = "Day Number"
+            sns.barplot(data=data, x=x, y=y, hue=conditions, estimator="mean", errorbar="sd")
+            add_group_counts(ax, data=data, x=x, hue=conditions)
+
+        case PlotType.BARPLOT_SUM:
+            if x == "Day":
+                x = "Day Number"
+            sns.barplot(data=data, x=x, y=y, hue=conditions, estimator="sum")
+            add_group_counts(ax, data=data, x=x, hue=conditions)
+
         # #Stats
         # stat_decision_tree(data, y, [x, z, *conditions])
-
+    
     fig.tight_layout()
 
     #Save figure if requested
@@ -963,6 +989,14 @@ def add_group_counts(ax: plt.axes, data: pd.DataFrame, x: str, hue=None, y_offse
     max_y = ylim[1]
     y_shift = (ylim[1] - ylim[0]) * y_offset
 
+    if x is None and hue is not None:
+        print(x, hue)
+        tmp_x = hue
+        hue = x
+        x = tmp_x
+        print(x, hue)
+        del tmp_x
+
     if hue:
         counts = data.groupby([x, hue]).size().reset_index(name='count')
         x_levels = data[x].unique()
@@ -988,7 +1022,9 @@ def add_group_counts(ax: plt.axes, data: pd.DataFrame, x: str, hue=None, y_offse
                     )
     else:
         counts = data[x].value_counts().sort_index()
+        print(counts)
         for i, (x_val, count) in enumerate(counts.items()):
+            print(i, max_y + y_shift, x_val, count)
             ax.text(i, max_y + y_shift, f"n={count}",
                     ha='center', va='bottom', fontsize=fontsize)
 
@@ -1033,12 +1069,26 @@ def check_folder_results(user_inputs, resultfile="UpdatedResults.csv"):
                             missing_days.append(d_path)
                         else:
 
-                            #Result files
-                            result_path = os.path.join(d_path, resultfile)
-                            if os.path.isfile(result_path) == False:
-                                missing_result.append(result_path)
+                            #Exact filename
+                            if "*" not in resultfile:
+                                result_path = os.path.join(d_path, resultfile)
+                                if os.path.isfile(result_path) == False:
+                                    missing_result.append(result_path)
+                                else:
+                                    result_paths.append({"Path": result_path, "Exp": exp, "Cond": val["Condition"][i]})
+                            
+                            #Look for patter filename
                             else:
-                                result_paths.append({"Path": result_path, "Exp": exp, "Cond": val["Condition"][i]})
+                                files_day = os.listdir(d_path)
+                                pat = resultfile.replace("*", "")
+                                print(val)
+                                for f in files_day:
+                                    print(f, pat, type(f), type(pat))
+                                    file = re.search(pat, f)
+                                    if file is not None:
+                                        result_path = os.path.join(d_path, f)
+                                        result_paths.append({"Path": result_path, "Exp": exp, "Cond": val["Condition"][i]})
+
 
     if len(missing_path) > 0:
         logger.error(f"Experiment Path not found: {"\n".join(missing_path)}")
@@ -1072,11 +1122,17 @@ def open_results(user_inputs, resultfile="UpdatedResults.csv", save: bool=False)
 
         f_data = pd.read_csv(f["Path"])
         #Add missing columns
-        f_data["Condition"] = f["Cond"]
-        f_data["Experiment"] = f["Exp"]
-        f_data["Hive_number"] = f_data["Hive number"]
-        tmp = f_data["Day"].replace("D", "", regex=True)
-        f_data["Day Number"] = tmp
+        if "Condition" not in f_data.columns:
+            f_data["Condition"] = f["Cond"]
+        if "Exeriment" not in f_data.columns:
+            f_data["Experiment"] = f["Exp"]
+        if "Hive number" in f_data.columns:
+            f_data["Hive_number"] = f_data["Hive number"]
+        if "Day" in f_data.columns:
+            tmp = f_data["Day"].replace("D", "", regex=True)
+            f_data["Day Number"] = tmp
+        if "Manually Discarded" not in f_data.columns:
+            f_data["Manually Discarded"] = False
 
         #Select only the organoids correctly segemented
         f_data = f_data[f_data["Manually Discarded"] == False]
@@ -1098,6 +1154,7 @@ def open_results(user_inputs, resultfile="UpdatedResults.csv", save: bool=False)
     #Save data if requested
     if save == True:
         name = os.path.join(user_inputs["Outpath"], user_inputs["Outname"] + ".csv")
+        print(name)
         data.to_csv(name)
         logger.info(f"Data saved: {name}.")
         
