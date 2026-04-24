@@ -136,5 +136,5 @@ class PlotType(Enum):
     LINE_MEDIAN = "line_median"
     SWARMPLOT = "swarmplot"
     BARPLOT = "barplot"
-    BARPLOT_SUM = "barplot_sum"
+    BARPLOT_STACK = "barplot_stack"
 

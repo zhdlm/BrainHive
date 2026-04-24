@@ -13,6 +13,8 @@ from scikit_posthocs import posthoc_dunn
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn.objects as so
+import matplotlib as mpl
+import matplotlib.colors as mcolors
 import seaborn as sns
 from math import floor, sqrt
 import numpy as np
@@ -801,7 +803,7 @@ def plots(data: pd.DataFrame, x: str, y: str, conditions: str, plot_type: PlotTy
     Parameters
     ----------
     data: pandas DataFrame.
-        Containing the "Day" column (used for the X-axis) and the column listed in "y" that will be used for the Y-axis.
+        Containing all column listed in "x", "y", "conditions" and "z".
     conditions: list of string.
         The list 
     y: list of PlotType.
@@ -826,7 +828,7 @@ def plots(data: pd.DataFrame, x: str, y: str, conditions: str, plot_type: PlotTy
         z_name = data[z].unique()
     else:
         z_name="None"
-    ttl = f"{plot_type.value}_x{x}_y{y}_z{",".join(z_name)}_c{",".join(condition_name)}"
+    ttl = f"{plot_type.value}_x{x}_y{y}_z{z}_c{conditions}"
     fig, ax = plt.subplots(figsize=(15,10), num=ttl)
     if x is not None:
         ax.set_xlabel(set_axis_label(x), fontsize=15)
@@ -919,11 +921,30 @@ def plots(data: pd.DataFrame, x: str, y: str, conditions: str, plot_type: PlotTy
             sns.barplot(data=data, x=x, y=y, hue=conditions, estimator="mean", errorbar="sd")
             add_group_counts(ax, data=data, x=x, hue=conditions)
 
-        case PlotType.BARPLOT_SUM:
+        case PlotType.BARPLOT_STACK:
             if x == "Day":
                 x = "Day Number"
-            sns.barplot(data=data, x=x, y=y, hue=conditions, estimator="sum")
-            add_group_counts(ax, data=data, x=x, hue=conditions)
+            
+            order = list(data[conditions].unique())
+            pivot = data.pivot(index=x, columns=conditions, values=y)
+
+            # Create a discrete colormap
+            palette = custom_palette()
+            cmap = mpl.colors.ListedColormap(palette)
+            bounds = np.arange(0.5, len(palette) + 0.5, 1)
+            norm = mpl.colors.BoundaryNorm(bounds, cmap.N)
+
+            # Add colorbar
+            sm = mpl.cm.ScalarMappable(cmap=cmap, norm=norm)
+            sm.set_array([])
+
+            pivot = pivot[order]
+            pivot.plot(ax=ax, kind='bar', stacked=True, color=palette, legend=False)
+            cbar = plt.colorbar(sm, ax=ax, ticks=range(len(palette)), pad=0.01)
+            cbar.ax.set_title(conditions, fontsize=15)
+            cbar.ax.set_yticklabels(order, fontsize=15)
+
+            add_group_counts(ax, data=data, x=x, hue=None)
 
         # #Stats
         # stat_decision_tree(data, y, [x, z, *conditions])
@@ -990,11 +1011,9 @@ def add_group_counts(ax: plt.axes, data: pd.DataFrame, x: str, hue=None, y_offse
     y_shift = (ylim[1] - ylim[0]) * y_offset
 
     if x is None and hue is not None:
-        print(x, hue)
         tmp_x = hue
         hue = x
         x = tmp_x
-        print(x, hue)
         del tmp_x
 
     if hue:
@@ -1022,13 +1041,40 @@ def add_group_counts(ax: plt.axes, data: pd.DataFrame, x: str, hue=None, y_offse
                     )
     else:
         counts = data[x].value_counts().sort_index()
-        print(counts)
         for i, (x_val, count) in enumerate(counts.items()):
-            print(i, max_y + y_shift, x_val, count)
             ax.text(i, max_y + y_shift, f"n={count}",
                     ha='center', va='bottom', fontsize=fontsize)
 
     ax.set_ylim(ylim[0], ylim[1] + (ylim[1] - ylim[0]) * 0.1)  # add top margin for text
+
+def adjust_lightness_cbar(color, factor):
+    r, g, b = mcolors.to_rgb(color)
+    return (
+        min(1, max(0, r * factor)),
+        min(1, max(0, g * factor)),
+        min(1, max(0, b * factor)),
+    )
+
+def custom_palette():
+    """Return a custom palette of 20 colors easily differenciable and intuitive"""
+    # 6 evenly spaced base colors (rainbow-like)
+    base_colors = sns.color_palette("hls", 6)
+
+    palette = [(0, 0, 0), (0.5, 0.5, 0.5)]  # start with black and gray
+
+    for i, c in enumerate(base_colors):
+        dark   = adjust_lightness_cbar(c, 0.6)
+        medium = c
+        light  = adjust_lightness_cbar(c, 1.4)
+
+        if i % 2 == 0:
+            # even index: dark → light
+            palette.extend([dark, medium, light])
+        else:
+            # odd index: light → dark
+            palette.extend([light, medium, dark])
+    
+    return palette
 
 ##################################################################################
 # RESULT FILE RELATED
@@ -1077,7 +1123,7 @@ def check_folder_results(user_inputs, resultfile="UpdatedResults.csv"):
                                 else:
                                     result_paths.append({"Path": result_path, "Exp": exp, "Cond": val["Condition"][i]})
                             
-                            #Look for patter filename
+                            #Look for pattern filename
                             else:
                                 files_day = os.listdir(d_path)
                                 pat = resultfile.replace("*", "")
@@ -1119,8 +1165,8 @@ def open_results(user_inputs, resultfile="UpdatedResults.csv", save: bool=False)
     for f in result_paths:
 
         #Store result file in DataFrame
-
         f_data = pd.read_csv(f["Path"])
+
         #Add missing columns
         if "Condition" not in f_data.columns:
             f_data["Condition"] = f["Cond"]
@@ -1154,7 +1200,6 @@ def open_results(user_inputs, resultfile="UpdatedResults.csv", save: bool=False)
     #Save data if requested
     if save == True:
         name = os.path.join(user_inputs["Outpath"], user_inputs["Outname"] + ".csv")
-        print(name)
         data.to_csv(name)
         logger.info(f"Data saved: {name}.")
         

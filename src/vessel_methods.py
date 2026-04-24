@@ -24,13 +24,9 @@ import csv
 import logging
 logger = logging.getLogger(__name__)
 
-#For tests
-class FakeSkeleton:
-    def __init__(self, vertices, edges, radii, segid=None):
-        self.vertices = np.array(vertices)
-        self.edges = np.array(edges)
-        self.radii = np.array(radii)
-        self.id = segid
+######################################
+# Create test images & skeleton
+######################################
 
 def create_microvessel_stack():
     """
@@ -180,7 +176,7 @@ def create_microvessel_stack():
 
     return vol
 
-def create_test_skeleton_no_loop():
+def create_test_skeleton_no_loop(delta=None):
     """
     ```
             (branch) 8
@@ -197,7 +193,7 @@ def create_test_skeleton_no_loop():
 
     ```
     """
-    vertices = [
+    vert = [
         (-1, 0, 0),   # 0
         (0, 0, 1),   # 1
         (0, 0, 2),   # 2 ← branch point
@@ -214,7 +210,7 @@ def create_test_skeleton_no_loop():
         (0, -3, 2)   # 11
     ]
 
-    edges = [
+    ed = [
         (0,1), (1,2), (2,3), (3,4), (4,5), (5,6),
         (2,7), (7,8),
         (2,9), (9,10), (10,11)
@@ -238,9 +234,16 @@ def create_test_skeleton_no_loop():
         0.7  # 11
     ]
 
+    if delta:
+        vertices = [(elt[0]+delta, elt[1]+delta, elt[2]+delta) for elt in vert]
+        edges = [(elt[0]+delta, elt[1]+delta) for elt in ed]
+    else:
+        vertices = vert
+        edges = ed
+
     return FakeSkeleton(vertices, edges, radii)
 
-def create_test_skeleton_loop():
+def create_test_skeleton_loop(delta=None):
     """
     ```
          8  x
@@ -257,7 +260,7 @@ def create_test_skeleton_loop():
 
     ```
     """
-    vertices = [
+    vert = [
         (-1, 0, 0),   # 0
         (0, 0, 1),   # 1
         (0, 0, 2),   # 2 ← branch point
@@ -280,7 +283,7 @@ def create_test_skeleton_loop():
 
     ]
 
-    edges = [
+    ed = [
         (0,1), (1,2), (2,3), (3,4), (4,5), (5,6),
         (2,7), (7,8),
         (2,9), (9,10), (10,11),
@@ -308,9 +311,18 @@ def create_test_skeleton_loop():
         0.7,  # 13
     ]
 
+    if delta:
+        vertices = [(elt[0]+delta, elt[1]+delta, elt[2]+delta) for elt in vert]
+        edges = [(elt[0]+delta, elt[1]+delta) for elt in ed]
+    else:
+        vertices = vert
+        edges = ed
+
     return FakeSkeleton(vertices, edges, radii)
 
-#For real data
+######################################
+# Files & Images
+######################################
 
 def read_usr_inputs(csv_filename):
     
@@ -471,6 +483,10 @@ def load_stack_metadata(day_path: str, filename: str, czi_mode: str):
 
     return full_stack, scaling, metadata
 
+######################################
+# Operations on Z-Stack
+######################################
+
 def pre_processing(usr: dict, f: int, endo_stack: np.ndarray, scaling: tuple, VESSEL_DIAM: float):
 
     logger.info("\n---------------------------------\n      Pre-Processing      \n---------------------------------")
@@ -621,11 +637,12 @@ def skeletonization(usr, index, mask, scaling, save=True):
         "const": 0, # control path pruning during TEASAR algo. Default is 300
         "pdrf_exponent": 8, # how much branch are penalized if close to edge of object (low values = low penalty). Default is 4.
         })
-    # skeleton = kimimaro.skeletonize(label(mask), anisotropy=(scaling[1],scaling[1],scaling[1]), dust_threshold=100, fix_branching=False, teasar_params=teasar_param)
-    skeleton = kimimaro.skeletonize(label(mask), anisotropy=(scaling[1],scaling[1],scaling[1]), dust_threshold=1000, fix_branching=False, teasar_params=teasar_param)
+    skeleton = kimimaro.skeletonize(label(mask), anisotropy=(scaling[1],scaling[1],scaling[1]), dust_threshold=100, fix_branching=False, teasar_params=teasar_param)
+    # skeleton = kimimaro.skeletonize(label(mask), anisotropy=(scaling[1],scaling[1],scaling[1]), dust_threshold=1000, fix_branching=False, teasar_params=teasar_param)
 
     #Clean skeletons:
     skeleton_kimi = {}
+    mask_clean = np.zeros(mask.shape)
     logger.info("Skeletonization | Clean Skeletons")
     for i, skel in enumerate(skeleton.values()):
 
@@ -643,16 +660,22 @@ def skeletonization(usr, index, mask, scaling, save=True):
                                                         [ G_updated.nodes[elt]["radius"] for elt in G_updated.nodes ],
                                                         segid=skel.id) #radii
         #Dilate the skeleton to get the clean mask of microvessels
-        mask_clean = skel2mask(skeleton_updated, mask.shape, scaling)
+        mask_clean = mask_clean + skel2mask(skeleton_updated, mask.shape, scaling)
         #Re-run skeletonization on cleaned mask
-        #skel_opti = kimimaro.skeletonize(label(mask_clean), anisotropy=(scaling[1],scaling[1],scaling[1]), dust_threshold=100, fix_branching=False, teasar_params=teasar_param, progress=False)
-        skel_opti = kimimaro.skeletonize(label(mask_clean), anisotropy=(scaling[1],scaling[1],scaling[1]), dust_threshold=1000, fix_branching=False, teasar_params=teasar_param, progress=False)
+        skel_opti = kimimaro.skeletonize(label(mask_clean), anisotropy=(scaling[1],scaling[1],scaling[1]), dust_threshold=100, fix_branching=False, teasar_params=teasar_param, progress=False)
+        #skel_opti = kimimaro.skeletonize(label(mask_clean), anisotropy=(scaling[1],scaling[1],scaling[1]), dust_threshold=1000, fix_branching=False, teasar_params=teasar_param, progress=False)
         #Assign the skeleton to the output dictionnary
         if len(skel_opti) == 0:
             pass
         else:
             skeleton_kimi[i] = skel_opti[1]
             skeleton_kimi[i].id = i
+    
+    #Save skeleton as file
+    df = pd.DataFrame(skel2dict(skeleton_kimi))
+    name = os.path.join(usr["out_path"], (usr["exp_name"] + usr["condname"][index] + f"_skeleton_opti.csv"))
+    df.to_csv(name, index=False)
+    del df, name
 
     print()
 
@@ -668,9 +691,18 @@ def skeletonization(usr, index, mask, scaling, save=True):
     logger.debug(f"Skeletonization | anisotropy={scaling}, dust_threshold=100,\n \
                 teasar_params={teasar_param}")
     
-    del skeleton, G, brenches, mask_clean, skel_opti, skeleton_updated, G_updated
-    
     return skeleton_kimi
+
+######################################
+# Operation on Graph & Skelton
+######################################
+
+class FakeSkeleton:
+    def __init__(self, vertices, edges, radii, segid=None):
+        self.vertices = np.array(vertices)
+        self.edges = np.array(edges)
+        self.radii = np.array(radii)
+        self.id = segid
 
 def extract_save_metrics(usr: dict, f: int, mask: np.ndarray, skeletons: dict, scaling: tuple):
     logger.info("\n---------------------------------\n     Metrics Extraction     \n---------------------------------")
@@ -679,9 +711,10 @@ def extract_save_metrics(usr: dict, f: int, mask: np.ndarray, skeletons: dict, s
     bin = round(20 / scaling[1])
     vessel_vol = np.count_nonzero(mask)
     stack_vol = mask.shape[0]*mask.shape[1]*mask.shape[2]
-    density = 100 * vessel_vol / stack_vol
-    density_bin = [100*np.count_nonzero(mask[b:b+bin, :, :])/stack_vol for b in range(0, round(400/scaling[1]), bin)]
-    mask_data = pd.DataFrame({"Volume Density": density_bin})
+    density_bin = [100*np.count_nonzero(mask[b:b+bin, :, :])/stack_vol for b in range(0, round(380/scaling[1]), bin)]
+    bins = [f"{str(b)}-{str(b+20)}um"for b in range(0, 400, 20)]
+    print(len(density_bin), len(bins), density_bin, bins)
+    mask_data = pd.DataFrame({"Depth": bins, "Volume Density": density_bin})
     mask_data["Image name"] = usr["filename"][f]
     mask_data["Condition"] = usr["condname"][f]
     mask_data["Stack used"] = [(usr["z_start"][f], usr["z_end"][f])]*len(density_bin)
@@ -691,48 +724,54 @@ def extract_save_metrics(usr: dict, f: int, mask: np.ndarray, skeletons: dict, s
     structures_data = None
     updated_skeleton = {}
 
-    #For each structure
-    for i, skel in enumerate(skeletons.values()):
+    if len(skeletons) > 0:
+        #For each structure
+        for i, skel in enumerate(skeletons.values()):
 
-        # print(f"Skeleton {i+1}/{n_skel}", end="\r")
-        print("id", skel.id)
+            # print(f"Skeleton {i+1}/{n_skel}", end="\r")
+            print("id", skel.id)
 
-        #Create networkx Graph
-        G = skeleton_to_graph(skel)
+            #Create networkx Graph
+            G = skeleton_to_graph(skel)
 
-        #Extract brenches data
-        brenches = get_brenches_data(G, scaling)
-        brenches["Id"] = skel.id
-        brenches["Image name"] = usr["filename"][f]
-        brenches["Condition"] = usr["condname"][f]
-        brenches["Stack used"] = [(usr["z_start"][f], usr["z_end"][f])]*len(brenches)
+            #Extract brenches data
+            brenches = get_brenches_data(G, scaling)
+            brenches["Id"] = skel.id
+            brenches["Image name"] = usr["filename"][f]
+            brenches["Condition"] = usr["condname"][f]
+            brenches["Stack used"] = [(usr["z_start"][f], usr["z_end"][f])]*len(brenches)
 
-        #Remove noise brenches from G and brenches
-        G_updated, brenches_updated, _, _, _ = brenches_post_process(G, brenches, scaling)
-        print(brenches_updated)
+            #Remove noise brenches from G and brenches
+            G_updated, brenches_updated, _, _, _ = brenches_post_process(G, brenches, scaling)
+            print(brenches_updated)
 
-        #Extract strcuture data
-        structure = get_structure_data(G, brenches, scaling[1])
-        structure["Id"] = skel.id
-        structure["Image name"] = usr["filename"][f]
-        structure["Condition"] = usr["condname"][f]
-        structure["Stack used"] = [(usr["z_start"][f], usr["z_end"][f])]*len(structure)
+            #Extract strcuture data
+            structure = get_structure_data(G, brenches, scaling[1])
+            structure["Id"] = skel.id
+            structure["Image name"] = usr["filename"][f]
+            structure["Condition"] = usr["condname"][f]
+            structure["Stack used"] = [(usr["z_start"][f], usr["z_end"][f])]*len(structure)
 
-        #Update skeleton
-        updated_skeleton[skel.id] = FakeSkeleton([ G_updated.nodes[elt]["coord"] for elt in G_updated.nodes ], #vertices
-                                                    G_updated.edges, #edges
-                                                    [ G_updated.nodes[elt]["radius"] for elt in G_updated.nodes ],
-                                                    segid=skel.id) #radii
+            #Update skeleton
+            updated_skeleton[skel.id] = FakeSkeleton([ G_updated.nodes[elt]["coord"] for elt in G_updated.nodes ], #vertices
+                                                        G_updated.edges, #edges
+                                                        [ G_updated.nodes[elt]["radius"] for elt in G_updated.nodes ],
+                                                        segid=skel.id) #radii
 
-        #Concatenate data with previous strcutures
-        if brenches_data is None:
-            brenches_data = brenches
-        else:
-            brenches_data = pd.concat([brenches_data, brenches_updated], ignore_index=True)
-        if structures_data is None:
-            structures_data = structure
-        else:
-            structures_data = pd.concat([structures_data, structure], ignore_index=True)
+            #Concatenate data with previous strcutures
+            if brenches_data is None:
+                brenches_data = brenches
+            else:
+                brenches_data = pd.concat([brenches_data, brenches_updated], ignore_index=True)
+            if structures_data is None:
+                structures_data = structure
+            else:
+                structures_data = pd.concat([structures_data, structure], ignore_index=True)
+
+    if brenches_data is None:
+        brenches_data = pd.DataFrame()
+    if structures_data is None:
+        structures_data = pd.DataFrame()
 
     #Save data
     mask_name = usr["exp_name"] + usr["condname"][f] + "_Mask_Results.csv"
@@ -749,7 +788,7 @@ def extract_save_metrics(usr: dict, f: int, mask: np.ndarray, skeletons: dict, s
 
     return brenches_data, structures_data
 
-def skeletons_to_volume(skeletons: dict[Skeleton], shape: tuple, anisotropy: tuple):
+def skeletons_to_volume(skeletons: dict[Skeleton], shape: tuple, anisotropy: tuple, pxl='one'):
     """Transform Kimimaro.skeleton dictionnary into numpy stack (np.ndarray(z,y,x))"""
 
     vol = np.zeros(shape, dtype=np.uint8)
@@ -764,7 +803,10 @@ def skeletons_to_volume(skeletons: dict[Skeleton], shape: tuple, anisotropy: tup
             p2 = verts[v2]
 
             rr = line_nd(p1, p2)
-            vol[rr] = 1
+            if pxl == 'one':
+                vol[rr] = 1
+            elif pxl == 'multi':
+                vol[rr] = skel_id
 
     return vol
 
@@ -1115,6 +1157,29 @@ def get_network_data(endo_vessel_bin):
 
     return network_data
 
+def skel2df(skel: Skeleton|dict[Skeleton]):
+
+    if isinstance(skel, dict):
+        skel_dict = []
+        for i,skel in skel.items():
+            attributes = list(skel.__dict__.keys())
+            skel_dict.append({key: getattr(skel, key) for key in attributes})
+            if skel_dict[-1]["id"] is None:
+                skel_dict[-1]["id"] = i
+    
+    elif isinstance(skel, Skeleton):
+        attributes = list(skel.__dict__.keys())
+        skel_dict = {key: getattr(skel, key) for key in attributes}
+
+    skel_df = pd.DataFrame(skel_dict)
+
+    return skel_df
+
+
+######################################
+# Visualization methods
+######################################
+
 def colored_zproj(stack_endo, step, zproj_name, display="off"):
 
     # Normalize intensity values between 0 and 1 (global normalization)
@@ -1186,7 +1251,7 @@ def vizualization_structures(skeleton: dict[Skeleton], structure_data: pd.DataFr
         skel_n = {}
         for i in structure_id[n]:
             skel_n[i] = skeleton[i]
-        skel_stack = skeletons_to_volume(skel_n, shape, scaling)
+        skel_stack = skeletons_to_volume(skel_n, shape, scaling, pxl='multi')
         np.save(name + f"_fig{n}.npy", skel_stack)
 
     # print(len(structure_fig), structure_fig)
@@ -1242,4 +1307,3 @@ def structure_non_overlapping(df):
             groups_id.append([bbox_id[idx]])
 
     return groups_id
-
