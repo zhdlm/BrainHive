@@ -22,6 +22,7 @@ import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import csv
 import logging
+import sparse
 logger = logging.getLogger(__name__)
 
 ######################################
@@ -378,6 +379,9 @@ def load_fluo_stack(usr, index, save=False):
         requested to perform microvessel analysis.
     index: int
         index of the elements to use in usr variable.
+    save: bool
+        save the fluorescent stack as ``usr["expname"]`_`usr["condname"]`_fluo.npz`, a sparsed format (.npz)
+        that can be opened using `load_lossless_compressed_img`
 
     Returns
     -------
@@ -407,6 +411,10 @@ def load_fluo_stack(usr, index, save=False):
 
     #Keep only fluorescent channel labelling endothelial cells for slices requested by user
     endo_stack = full_stack[usr["fluo_chans"][index].index(usr["fluo_endo"][index]), int(usr["z_start"][index]):int(usr["z_end"][index]), :, :]
+
+    if save == True:
+        name = usr["expname"] + "_" + usr["condname"][index] + "_fluo.npz"
+        save_lossless_compressed_img(endo_stack, usr["out_path"], name)
 
     #remove unsued variables
     del full_stack, metadata
@@ -483,6 +491,32 @@ def load_stack_metadata(day_path: str, filename: str, czi_mode: str):
 
     return full_stack, scaling, metadata
 
+def save_lossless_compressed_img(img, path, name):
+    #Sparse the image
+    arr = sparse.COO.from_numpy(img)
+
+    #Get params for saving
+    coords = arr.coords
+    data = arr.data
+    shape = arr.shape
+    
+    #Save params
+    np.savez_compressed(os.path.join(path, name), 
+                        coords=coords,
+                        data=data,
+                        shape=shape)
+    print(path, name)
+
+def load_lossless_compressed_img(path, name):
+
+    loader = np.load(os.path.join(path, name))
+    arr = sparse.COO(
+        loader["coords"],
+        loader["data"],
+        shape=loader["shape"]
+    )
+    return arr
+
 ######################################
 # Operations on Z-Stack
 ######################################
@@ -503,7 +537,8 @@ def pre_processing(usr: dict, f: int, endo_stack: np.ndarray, scaling: tuple, VE
         endo_stack_iso = get_isotropic_stack(endo_stack, scaling)
     else:
         endo_stack_iso = endo_stack.copy()
-    np.save(os.path.join(usr["out_path"], (usr["exp_name"] + usr["condname"][f] + "_iso.npy")), endo_stack_iso)
+    save_lossless_compressed_img(endo_stack_iso, usr["out_path"], (usr["exp_name"] + usr["condname"][f] + "_iso.npz"))
+    # np.save(os.path.join(usr["out_path"], (usr["exp_name"] + usr["condname"][f] + "_iso.npy")), endo_stack_iso)
 
     #Update dimension and depth
     dims = endo_stack_iso.shape
@@ -521,12 +556,13 @@ def pre_processing(usr: dict, f: int, endo_stack: np.ndarray, scaling: tuple, VE
     vessel_diam_pxl = [round(elt/(2*scaling[1]), 1) for elt in vessel_diam]
     logger.info(f"Pre-Prcoessing | Enchance tubes for range (µm): {vessel_diam}\n\trange in pxl: {vessel_diam_pxl}")
     endo_vessel_sato = sato(endo_stack_contrast, sigmas=vessel_diam_pxl, black_ridges=False)
-    np.save(os.path.join(usr["out_path"], (usr["exp_name"] + usr["condname"][f] + "_sato.npy")), endo_vessel_sato)
+    save_lossless_compressed_img(endo_vessel_sato, usr["out_path"], (usr["exp_name"] + usr["condname"][f] + "_satp.npz"))
+    #np.save(os.path.join(usr["out_path"], (usr["exp_name"] + usr["condname"][f] + "_sato.npy")), endo_vessel_sato)
     del endo_stack_contrast
 
     return endo_vessel_sato
 
-def get_isotropic_stack(stack, scaling: tuple, save=False):
+def get_isotropic_stack(stack, scaling: tuple):
     """Return resliced stack as np.ndarray of dimension (Z,Y,X) with isotropic voxel."""
     
     img = sitk.GetImageFromArray(stack)
@@ -545,6 +581,7 @@ def get_isotropic_stack(stack, scaling: tuple, save=False):
     resampled_img = resampler.Execute(img)
 
     stack_iso = sitk.GetArrayFromImage(resampler.Execute(img))
+
     del img, resampler, new_spacing
 
     return stack_iso
@@ -590,7 +627,8 @@ def morpho_filter(usr, index, stack_thresholded: np.ndarray, scaling, CELL_RADIU
     endo_vessel_erode = binary_erosion(endo_vessel_rm, ellipse_2_4)
     endo_vessel_bin = binary_dilation(endo_vessel_erode, ellipse_1_2)
     del endo_vessel_close, stack_thresholded
-    np.save(os.path.join(usr["out_path"], (usr["exp_name"] + usr["condname"][index] + "_bin.npy")), endo_vessel_bin)
+    save_lossless_compressed_img(endo_vessel_bin, usr["out_path"], (usr["exp_name"] + usr["condname"][index] + "_bin.npz"))
+    # np.save(os.path.join(usr["out_path"], (usr["exp_name"] + usr["condname"][index] + "_bin.npy")), endo_vessel_bin)
 
     logger.info("Morphology Filtering | close (2,4,2) & remove small objects < Cell volume (~523 µm3)")
 
@@ -630,15 +668,17 @@ def skeletonization(usr, index, mask, scaling, save=True):
     logger.info("\n---------------------------------\n     Skeletonization     \n---------------------------------")
 
     #Determine skeletons
-    logger.info("Skeletonization | Compute Skeletons")
+    cell_diam = 5
+    dust = (4*np.pi*np.pow(cell_diam,3)/3)/scaling[1] #number of voxel is less than the number of voxel composing volume of one cell
     teasar_param = kimimaro.intake.DEFAULT_TEASAR_PARAMS.copy()
     teasar_param.update({
         "scale": 3, #defines skeleton detail (high value for less detail). Default is 1.5
         "const": 0, # control path pruning during TEASAR algo. Default is 300
         "pdrf_exponent": 8, # how much branch are penalized if close to edge of object (low values = low penalty). Default is 4.
         })
-    skeleton = kimimaro.skeletonize(label(mask), anisotropy=(scaling[1],scaling[1],scaling[1]), dust_threshold=100, fix_branching=False, teasar_params=teasar_param)
-    # skeleton = kimimaro.skeletonize(label(mask), anisotropy=(scaling[1],scaling[1],scaling[1]), dust_threshold=1000, fix_branching=False, teasar_params=teasar_param)
+    logger.info(f"Skeletonization | Params: dust={dust}; scale={teasar_param["scale"]}; const={teasar_param["const"]}; pdrf_exponent={teasar_param["pdrf_exponent"]}")
+    logger.info("Skeletonization | Compute Skeletons")
+    skeleton = kimimaro.skeletonize(label(mask), anisotropy=(scaling[1],scaling[1],scaling[1]), dust_threshold=dust, fix_branching=False, teasar_params=teasar_param)
 
     #Clean skeletons:
     skeleton_kimi = {}
@@ -660,19 +700,22 @@ def skeletonization(usr, index, mask, scaling, save=True):
                                                         [ G_updated.nodes[elt]["radius"] for elt in G_updated.nodes ],
                                                         segid=skel.id) #radii
         #Dilate the skeleton to get the clean mask of microvessels
-        mask_clean = mask_clean + skel2mask(skeleton_updated, mask.shape, scaling)
+        mask_tmp = skel2mask(skeleton_updated, mask.shape, scaling)
+        mask_clean = mask_clean + mask_tmp
         #Re-run skeletonization on cleaned mask
-        skel_opti = kimimaro.skeletonize(label(mask_clean), anisotropy=(scaling[1],scaling[1],scaling[1]), dust_threshold=100, fix_branching=False, teasar_params=teasar_param, progress=False)
-        #skel_opti = kimimaro.skeletonize(label(mask_clean), anisotropy=(scaling[1],scaling[1],scaling[1]), dust_threshold=1000, fix_branching=False, teasar_params=teasar_param, progress=False)
+        skel_opti = kimimaro.skeletonize(label(mask_tmp), anisotropy=(scaling[1],scaling[1],scaling[1]), dust_threshold=dust, fix_branching=False, teasar_params=teasar_param, progress=False)
+        
         #Assign the skeleton to the output dictionnary
         if len(skel_opti) == 0:
             pass
         else:
+            # segid = list(skel_opti.keys())
+            # print(segid)
             skeleton_kimi[i] = skel_opti[1]
             skeleton_kimi[i].id = i
     
     #Save skeleton as file
-    df = pd.DataFrame(skel2dict(skeleton_kimi))
+    df = pd.DataFrame(skel2df(skeleton_kimi))
     name = os.path.join(usr["out_path"], (usr["exp_name"] + usr["condname"][index] + f"_skeleton_opti.csv"))
     df.to_csv(name, index=False)
     del df, name
@@ -682,10 +725,13 @@ def skeletonization(usr, index, mask, scaling, save=True):
     #Save the clean skeleton
     if save == True:
         skeleton_stack = skeletons_to_volume(skeleton, mask.shape, (scaling[1],scaling[1],scaling[1]))
-        np.save(os.path.join(usr["out_path"], (usr["exp_name"] + usr["condname"][index] + f"_skeleton.npy")), skeleton_stack)
-        skeleton_stack_opti = skeletons_to_volume(skeleton_kimi, mask.shape, (scaling[1],scaling[1],scaling[1]))    
-        np.save(os.path.join(usr["out_path"], (usr["exp_name"] + usr["condname"][index] + f"_skeleton_opti.npy")), skeleton_stack_opti)
-        np.save(os.path.join(usr["out_path"], (usr["condname"][index] + "_bin2.npy")), mask_clean)
+        save_lossless_compressed_img(skeleton_stack, usr["out_path"], (usr["exp_name"] + usr["condname"][index] + "_skeleton.npz"))
+        skeleton_stack_opti = skeletons_to_volume(skeleton_kimi, mask.shape, (scaling[1],scaling[1],scaling[1]))
+        save_lossless_compressed_img(skeleton_stack_opti, usr["out_path"], (usr["exp_name"] + usr["condname"][index] + "_skeleton_opti.npz"))
+        save_lossless_compressed_img(mask_clean, usr["out_path"], (usr["exp_name"] + usr["condname"][index] + "_bin2.npz"))    
+        # np.save(os.path.join(usr["out_path"], (usr["exp_name"] + usr["condname"][index] + f"_skeleton.npy")), skeleton_stack)
+        # np.save(os.path.join(usr["out_path"], (usr["exp_name"] + usr["condname"][index] + f"_skeleton_opti.npy")), skeleton_stack_opti)
+        # np.save(os.path.join(usr["out_path"], (usr["condname"][index] + "_bin2.npy")), mask_clean)
         del skeleton_stack, skeleton_stack_opti
 
     logger.debug(f"Skeletonization | anisotropy={scaling}, dust_threshold=100,\n \
@@ -713,7 +759,7 @@ def extract_save_metrics(usr: dict, f: int, mask: np.ndarray, skeletons: dict, s
     stack_vol = mask.shape[0]*mask.shape[1]*mask.shape[2]
     density_bin = [100*np.count_nonzero(mask[b:b+bin, :, :])/stack_vol for b in range(0, round(380/scaling[1]), bin)]
     bins = [f"{str(b)}-{str(b+20)}um"for b in range(0, 400, 20)]
-    print(len(density_bin), len(bins), density_bin, bins)
+    # print(len(density_bin), len(bins), density_bin, bins)
     mask_data = pd.DataFrame({"Depth": bins, "Volume Density": density_bin})
     mask_data["Image name"] = usr["filename"][f]
     mask_data["Condition"] = usr["condname"][f]
@@ -729,7 +775,7 @@ def extract_save_metrics(usr: dict, f: int, mask: np.ndarray, skeletons: dict, s
         for i, skel in enumerate(skeletons.values()):
 
             # print(f"Skeleton {i+1}/{n_skel}", end="\r")
-            print("id", skel.id)
+            # print("id", skel.id)
 
             #Create networkx Graph
             G = skeleton_to_graph(skel)
@@ -743,7 +789,7 @@ def extract_save_metrics(usr: dict, f: int, mask: np.ndarray, skeletons: dict, s
 
             #Remove noise brenches from G and brenches
             G_updated, brenches_updated, _, _, _ = brenches_post_process(G, brenches, scaling)
-            print(brenches_updated)
+            # print(brenches_updated)
 
             #Extract strcuture data
             structure = get_structure_data(G, brenches, scaling[1])
@@ -784,7 +830,8 @@ def extract_save_metrics(usr: dict, f: int, mask: np.ndarray, skeletons: dict, s
     structures_data.to_csv(os.path.join(usr["out_path"], structure_name), index=False)
     logger.info(f"Metrics Extraction | Saved strcuture data as {structure_name}'")
     updated_skeleton_stack = skeletons_to_volume(updated_skeleton, mask.shape, scaling[1])
-    np.save(os.path.join(usr["out_path"], (usr["exp_name"] + usr["condname"][f] + "_skeleton_final.npy")), updated_skeleton_stack)
+    save_lossless_compressed_img(updated_skeleton_stack, usr["out_path"], (usr["exp_name"] + usr["condname"][f] + "_skeleton_final.npz"))
+    # np.save(os.path.join(usr["out_path"], (usr["exp_name"] + usr["condname"][f] + "_skeleton_final.npy")), updated_skeleton_stack)
 
     return brenches_data, structures_data
 

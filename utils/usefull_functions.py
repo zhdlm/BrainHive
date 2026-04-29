@@ -925,8 +925,10 @@ def plots(data: pd.DataFrame, x: str, y: str, conditions: str, plot_type: PlotTy
             if x == "Day":
                 x = "Day Number"
             
+
             order = list(data[conditions].unique())
-            pivot = data.pivot(index=x, columns=conditions, values=y)
+            pivot = data.pivot(index=x, columns=[conditions, z], values=y)
+            print(pivot)
 
             # Create a discrete colormap
             palette = custom_palette()
@@ -939,7 +941,7 @@ def plots(data: pd.DataFrame, x: str, y: str, conditions: str, plot_type: PlotTy
             sm.set_array([])
 
             pivot = pivot[order]
-            pivot.plot(ax=ax, kind='bar', stacked=True, color=palette, legend=False)
+            pivot.plot(ax=ax, kind='bar', stacked=True, color=palette, legend=False, )
             cbar = plt.colorbar(sm, ax=ax, ticks=range(len(palette)), pad=0.01)
             cbar.ax.set_title(conditions, fontsize=15)
             cbar.ax.set_yticklabels(order, fontsize=15)

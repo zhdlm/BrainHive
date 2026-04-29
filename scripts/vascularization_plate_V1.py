@@ -8,6 +8,7 @@ from skimage.io import imread, imsave
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from skimage.exposure import equalize_adapthist
 
 VERSION = "V2"
 VESSEL_DIAM = 10 #in µm
@@ -19,7 +20,7 @@ logger.info("\n=================================\n      MICRO-VESSEL ANALYSIS   
 
 # 0. USER INPUTS
 #---------------
-usr = vm.read_usr_inputs("User_inputs\\Exp004-E.csv")
+usr = vm.read_usr_inputs("User_inputs\\Exp001-E_E-.csv")
 
 for f in range(len(usr["filename"])):
 
@@ -32,10 +33,14 @@ for f in range(len(usr["filename"])):
     # 2. PRE-PROCESSING: depends on anisotropy
     #-----------------------------------------
     endo_pre_process = vm.pre_processing(usr, f, endo_stack, scaling, VESSEL_DIAM)
-    # endo_pre_process = np.load(os.path.join(usr["out_path"], "Demovascu_sato.npy"))
 
     # 3. THRESHOLD
     #-------------
+    #Optional: re-run only skeleton and comment step 2-4
+    # name= usr["exp_name"] + usr["condname"][f] + "_sato.npy"
+    # #endo_pre_process = vm.load_lossless_compressed_img(os.path.join(usr["out_path"]), name)
+    # endo_pre_process = np.load(os.path.join(usr["out_path"], name))
+    # print(endo_pre_process.shape)
     endo_thresholded = vm.threshold(endo_pre_process)
 
     # 4. MORPHOLOGY FILTERING
@@ -54,34 +59,13 @@ for f in range(len(usr["filename"])):
     #----------------------------------
     brenches_data, structures_data = vm.extract_save_metrics(usr, f, endo_bin, skeleton_kimi, (scaling[1], scaling[1], scaling[1]))
 
-    # vm.vizualization_structures(skeleton_kimi, structures_data, (scaling[1], scaling[1], scaling[1]), endo_bin.shape, usr["condname"][f])
-
-    # ##########################################################
-    # # 6. SAVING DATA
-    # ##########################################################
-
-    # logger.info("\n---------------------------------\n     Saving Data     \n---------------------------------")
-    # logger.info(f"Saving Data | Saving path: {usr["out_path"]}")
-
-    # brench_name = usr["exp_name"] + usr["condname"][f] + "_Brenches_Results.csv"
-    # brenches_data.to_csv(os.path.join(usr["out_path"], brench_name), index=False)
-    # logger.info(f"Saved brenches data as {brench_name}")
-
-    # structure_name = usr["exp_name"] + usr["condname"][f] + "Structure_Results.csv"
-    # structures_data.to_csv(os.path.join(usr["out_path"], structure_name), index=False)
-    # logger.info(f"Saved strcuture data as {structure_name}'")
-
-    # updated_skeleton_stack = vm.skeletons_to_volume(skeleton_kimi, endo_vessel_bin.shape, scaling[1])
-    # np.save(os.path.join(usr["out_path"], (usr["exp_name"] + usr["condname"][f] + "_skeleton_updated.npy")), updated_skeleton_stack)
+    #vm.vizualization_structures(skeleton_kimi, structures_data, (scaling[1], scaling[1], scaling[1]), endo_bin.shape, usr["condname"][f])
 
 
-    # ##########################################################
-    # # 6. VIZUALIZATION
-    # ##########################################################
-
-    # # Z-projection with colors
-    # endo_stack_opti_contrast = equalize_adapthist(endo_stack)
-    # zproj_name = os.path.join(usr["out_path"], usr["exp_name"] + usr["condname"][f] + "contrat_colored_Zproj.jpeg")
-    # zproj = vm.colored_zproj(endo_stack_opti_contrast, scaling[0], zproj_name, display=False)
+    # 7. VIZUALIZATION
+    #----------------------------------
+    endo_stack_opti_contrast = equalize_adapthist(endo_stack)
+    zproj_name = os.path.join(usr["out_path"], usr["exp_name"] + usr["condname"][f] + "contrat_colored_Zproj.jpeg")
+    zproj = vm.colored_zproj(endo_stack_opti_contrast, scaling[0], zproj_name, display=False)
     # zproj_name = os.path.join(usr["out_path"], usr["exp_name"] + usr["condname"][f] + "colored_Zproj.jpeg")
     # zproj = vm.colored_zproj(endo_stack, scaling[0], zproj_name, display=False)

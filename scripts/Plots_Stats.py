@@ -17,6 +17,10 @@ user_inputs = uf.read_graph_inputs("User_Inputs/graph_inputs.json")
 #2. Open, Combine & Save results
 data = uf.open_results(user_inputs, "*Mask_Results.csv", save=False)
 
+conds = ["E-", "E+", "EB-", "EB+", "NI-", "NI+", "D-+-", "D-++", "D--", "D-+", "D+-", "D++"]
+data = data[data["Condition"].isin(conds)]
+print(data)
+
 #3. Plot graphic
 uf.plots(data, "Condition", "Volume Density", "Depth", PlotType.BARPLOT_STACK, savefig=user_inputs["Outpath"], z="Experiment")
 # uf.plots(data, "Condition", "Mean Length", "Experiment", PlotType.BARPLOT, savefig=user_inputs["Outpath"])

@@ -1,6 +1,8 @@
+import _bootstrap
 import numpy as np
 import napari
 import os
+import src.vessel_methods as vm
 
 # endo_stack = np.load("endo_stack.npy")
 # viewer0 = napari.Viewer()
@@ -32,15 +34,15 @@ name = "Exp002-E_ShortNI-"
 viewer = napari.Viewer()
 
 sato = np.load(os.path.join(path, name + "_sato.npy"))
-bin = np.load(os.path.join(path, name + "_bin.npy"))
-# bin2 = np.load(os.path.join(path, name + "_bin2.npy"))
+bin = vm.load_lossless_compressed_img(path, name + "_bin.npz") #np.load(os.path.join(path, name + "_bin.npy"))
+bin2 = vm.load_lossless_compressed_img(path, name + "_bin2.npz")
 # skel = np.load(os.path.join(path, name + "_skeleton.npy"))
 # skelopti = np.load(os.path.join(path, name + "_skeleton_opti.npy"))
 # skelfin = np.load(os.path.join(path, name + "_skeleton_final.npy"))
 
 viewer.add_image(sato, name="sato")
 viewer.add_image(bin, name="bin")
-# viewer.add_image(bin2, name="bin2")
+viewer.add_image(bin2, name="bin2")
 # viewer.add_image(skel, name="skel")
 # viewer.add_image(skelopti, name="skelopti")
 # viewer.add_image(skelfin, name="skelfin")
